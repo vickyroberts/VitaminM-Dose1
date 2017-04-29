@@ -10,26 +10,25 @@ var jwt = require('jsonwebtoken');
 var logger = require("../logger");
 var messages = require('../GlobalMessages.js');
 var conn = require("./Connection.js");
-//var utility = require("./Utility.js");
+var util = require("./Utility.js");
 
 
 promise.promisifyAll(bcrypt);
 promise.promisifyAll(pg);
 
-
+//Get the schema name from the user name. Schema name will be dynamically decided.
 function getUserSchema(username, callback) {  
   // Set the client properties that came from the POST data
   if(username)
   {       
     
-    logger.debug("UserControl - Getting the schema");
-    
-   //var pschemaName = conn.getDBSchema("");     
+    logger.info("UserControl - Getting the schema");   
+     
     conn.pgConnectionPool(function(err, clientConn, done)
     {    
       if(err)
       {        
-        logger.debug("postUserLogin - Error while connection PG" + err);
+        logger.info("postUserLogin - Error while connection PG" + err);
         callback(err);
       }
       else
@@ -40,6 +39,7 @@ function getUserSchema(username, callback) {
             done(err);
             if(err)
             {
+              logger.error("UserControl - Getting the schema");
                callback(err);
             }
             else
@@ -52,18 +52,20 @@ function getUserSchema(username, callback) {
   }
   else
   {         
+    logger.error("UserControl - Getting the schema email not available");
     var errorNew = {status:messages.apiStatusError,message:messages.emailNotAvailable};
     callback(errorNew);
   }};
 
-
+//Check if user is valid
 exports.authUser = function(req, res) {  
   // Set the client properties that came from the POST data
-  if(req.body && req.body.username && req.body.password)
+  if(req.body && req.body.uname && req.body.doorkey)
   {        
     
-    logger.debug("UserControl - Auth user");
-    getUserSchema(req.body.username, function(error, resultSchema){
+    logger.info("UserControl - Auth user");
+    //Get the schema name with the help of username name.
+    getUserSchema(req.body.uname, function(error, resultSchema){
       if(error)
       {
         res.json({status:messages.apiStatusError,message:messages.authInvalid});
@@ -75,16 +77,21 @@ exports.authUser = function(req, res) {
           if(err)
           {
             console.log("UserControl - Error while connection PG" + err);
-            logger.debug("UserControl - Error while connection PG" + err);
+            logger.error("UserControl - Error while connection PG" + err);
+            res.status(200);
+            res.json({status:messages.apiStatusError,message:messages.dbConnectionError});
+            done(err);
           }
           else
           {
+            //Get the user auth from sp. Hit the common select func, this will create a transaction for cursor.            
             var queryStr = "SELECT * from milkdelivery_master.sp_get_userauth($1, $2, $3)";
-            var paramsArr = [req.body.username,req.body.password, resultSchema.rows[0].db_name];
+            var paramsArr = [req.body.uname,req.body.doorkey, resultSchema.rows[0].db_name];
             conn.pgSelectQuery(queryStr, paramsArr, clientConn, function(err, result){
                 res.status(200);
                 if(err)
                 {
+                  logger.error("UserControl - Error while getting auth data " + err);
                   res.json({status:messages.apiStatusError,message:messages.dbConnectionError});
                 }
                 else
@@ -101,9 +108,10 @@ exports.authUser = function(req, res) {
                       res.json({status:messages.apiStatusSuccess,token:token, tempObject:user});
                     }
                     else
-                    {             
+                    { 
+                      logger.error(messages.authInvalid);            
                       res.status(403);
-                        res.json({status:messages.apiStatusError,message:messages.authInvalid});  
+                      res.json({status:messages.apiStatusError,message:messages.authInvalid});  
                     }
                 }
                 done(err);
@@ -116,37 +124,44 @@ exports.authUser = function(req, res) {
   }
   else
   {
+    logger.error(messages.apiStatusError); 
     res.status(200);     
     res.json({status:messages.apiStatusError,message:messages.authUserPwdNotProvided});
   }
 };
 
+//check if the email already exists. Will be called when user tabs out
 exports.userEmailExists = function(req, res) {  
   // Set the client properties that came from the POST data
-  if(req.body && req.body.username)
+  if(req.body && req.body.uname)
   { 
-    logger.debug("UserControl - Email exists");
-    
-   //var pschemaName = conn.getDBSchema("");     
+    logger.info("UserControl - Email exists");    
+   
     conn.pgConnectionPool(function(err, clientConn, done)
     {    
       if(err)
-      {
+      {        
         console.log("UserControl - Error while connection PG" + err);
-        logger.debug("UserControl - Error while connection PG" + err);
+        logger.error("UserControl - Error while connection PG" + err);
+        res.status(200);                  
+        res.json({status:messages.apiStatusError,message:messages.dbConnectionError});
+        done(err);
       }
       else
       {
+        //Get the email check from sp. Hit the common select func, this will create a transaction for cursor.
         var queryStr = "SELECT * from milkdelivery_master.sp_get_check_email_available($1, $2)";
-        var paramsArr = [req.body.username,req.decoded.schema];
+        var paramsArr = [req.body.uname,req.decoded.schema];
         conn.pgSelectQuery(queryStr, paramsArr, clientConn, function(err, result){
             res.status(200);
             if(err)
             {
+              logger.error("UserControl - Error while checking same email " + err);
               res.json({status:messages.apiStatusError,message:messages.dbConnectionError});
             }
             else
             {
+                //If record is available for email passed
                 if(result && result.rows && result.rows.length > 0)
                 {
                   res.status(200);                  
@@ -165,10 +180,12 @@ exports.userEmailExists = function(req, res) {
   }
   else
   {
+    logger.error("UserControl - Email not provided while checking same email ");
     res.status(200);     
     res.json({status:messages.apiStatusError,message:messages.emailNotAvailable});
   }};
 
+ //check if the mobile already exists. Will be called when user tabs out 
   exports.userMobileExists = function(req, res) {  
   // Set the client properties that came from the POST data
   if(req.body && req.body.mobileno)
@@ -180,20 +197,26 @@ exports.userEmailExists = function(req, res) {
       if(err)
       {
         console.log("UserControl - Error while connection PG" + err);
-        logger.debug("UserControl - Error while connection PG" + err);
+        logger.error("UserControl - Error while connection PG" + err);
+        res.status(200);                      
+        res.json({status:messages.apiStatusError,message:messages.dbConnectionError});
+        done(err);
       }
       else
       {
+        //Get the phone check from sp. Hit the common select func, this will create a transaction for cursor.
         var queryStr = "SELECT * from milkdelivery_master.sp_get_check_mobile_available($1, $2)";
         var paramsArr = [req.body.mobileno,req.decoded.schema];
         conn.pgSelectQuery(queryStr, paramsArr, clientConn, function(err, result){
             res.status(200);
             if(err)
             {
+              logger.error("UserControl - Error while checking same mobile ");
               res.json({status:messages.apiStatusError,message:messages.dbConnectionError});
             }
             else
             {
+              //If record is available for mobile no. passed
                 if(result && result.rows && result.rows.length > 0)
                 {
                   res.status(200);
@@ -213,8 +236,197 @@ exports.userEmailExists = function(req, res) {
   }
   else
   {
+    logger.error("UserControl - Mobile not provided while checking same email ");
     res.status(200);     
     res.json({status:messages.apiStatusError,message:messages.mobileNotAvailable});
+  }};
+
+  //user registration: fname, lname, email, password and mob is mandatory.
+exports.registerUser = function(req, res) {  
+  // Set the client properties that came from the POST data
+  if(req.body && req.body.firstname && req.body.lastname && req.body.uname && req.body.doorkey && req.body.mobile)
+  { 
+    logger.info("UserControl - User add info");       
+    conn.pgConnectionPool(function(err, clientConn, done)
+    {    
+      if(err)
+      {        
+        console.log("UserControl - Error while connection PG" + err);
+        logger.error("UserControl - Error while connection PG" + err);
+        res.status(200);                  
+        res.json({status:messages.apiStatusError,message:messages.dbConnectionError});
+        done(err);
+      }
+      else
+      {
+        var mobileCode = util.getMobRandomInt(1786,9786) + 8;
+        //Insert the values in the table. Transaction is maintained at DB level. Multi-Table save.
+        var queryStr = "SELECT * FROM milkdelivery_master.sp_insert_userinfo($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11);";
+        var paramsArr = new Array(req.body.firstname,req.body.lastname,req.body.uname,req.body.doorkey,req.body.mobile,req.body.address1,req.body.address2,req.body.areaid,req.body.cityid,req.body.stateid, mobileCode);
+        conn.pgExecuteQuery(queryStr, paramsArr, clientConn, function(err, result){
+            res.status(200);
+            if(err)
+            {
+              logger.error("UserControl - Error while adding user info " + err);
+              res.json({status:messages.apiStatusError,message:messages.userInfoAddError});
+            }
+            else
+            {
+                //If record is saved successfully.
+                if(result && result.rows && result.rows.length > 0)
+                {         
+                  if(result.rows[0]['sp_insert_userinfo'] == "-1")         
+                  {
+                    res.status(200);
+                    res.json({status:messages.apiStatusError, message:messages.emailExist});                  
+                  }
+                  else if(result.rows[0]['sp_insert_userinfo'] == "-2")         
+                  {
+                    res.status(200);
+                    res.json({status:messages.apiStatusError, message:messages.mobileExist});                  
+                  }
+                  else
+                  {
+                    res.status(200);
+                    res.json({status:messages.apiStatusSuccess, message:messages.userAddSuccessMessage});                  
+                  }                  
+                }
+                else
+                {             
+                    res.status(200);                  
+                    res.json({status:messages.apiStatusError,message:messages.userInfoAddError});
+                }
+            }
+            done(err);
+        });
+      }
+    });
+  }
+  else
+  {
+    logger.error("UserControl - Add user : Missing data fields");
+    res.status(200);     
+    res.json({status:messages.apiStatusError,message:messages.userInfoAddErrorInsuficientData});
+  }};
+
+
+ //Verify the mobile code of the user
+exports.verifyUserMobile = function(req, res) {  
+  // Set the client properties that came from the POST data
+  if(req.body && req.body.mobilecode && req.decoded.uid)
+  { 
+    logger.info("UserControl - Verify Mobile No.");       
+    conn.pgConnectionPool(function(err, clientConn, done)
+    {    
+      if(err)
+      {        
+        console.log("UserControl - Error while connection PG" + err);
+        logger.error("UserControl - Error while connection PG" + err);
+        res.status(200);                  
+        res.json({status:messages.apiStatusError,message:messages.dbConnectionError});
+        done(err);
+      }
+      else
+      {        
+        //Check if the mobile code passed by user is correct. Change the user status.
+        var queryStr = "SELECT * FROM milkdelivery_master.sp_update_verifymobile($1,$2,$3);";
+        var paramsArr = new Array(req.decoded.uid, req.body.mobilecode, req.decoded.schema);
+        conn.pgExecuteQuery(queryStr, paramsArr, clientConn, function(err, result){
+            res.status(200);
+            if(err)
+            {
+              logger.error("UserControl - Error while mobile verification " + err);
+              res.json({status:messages.apiStatusError,message:messages.mobileVerificationError});
+            }
+            else
+            {
+                //If record is saved successfully.
+                if(result && result.rows && result.rows.length > 0)
+                {         
+                  if(result.rows[0]['sp_update_verifymobile'] == "-1")         
+                  {
+                    res.status(200);
+                    res.json({status:messages.apiStatusError, message:messages.mobileVerificationError});                  
+                  }                 
+                  else
+                  {
+                    res.status(200);
+                    res.json({status:messages.apiStatusSuccess, message:messages.mobileVerificationSuccess});                  
+                  }                  
+                }
+                else
+                {             
+                    res.status(200);                  
+                    res.json({status:messages.apiStatusError,message:messages.mobileVerificationError});
+                }
+            }
+            done(err);
+        });
+      }
+    });
+  }
+  else
+  {
+    logger.error("UserControl - Mobile verification : Missing data field");
+    res.status(200);     
+    res.json({status:messages.apiStatusError,message:messages.mobileVerificationNotAvailable});
+  }};
+
+//Regenerate the mobile code of the user
+exports.regenerateMobileCode = function(req, res) {  
+  // Set the client properties that came from the POST data
+  if(req.body && req.decoded.uid)
+  { 
+    logger.info("UserControl - Regenerate Mobile code");       
+    conn.pgConnectionPool(function(err, clientConn, done)
+    {    
+      if(err)
+      {        
+        console.log("UserControl - Error while connection PG" + err);
+        logger.error("UserControl - Error while connection PG" + err);
+        res.status(200);                  
+        res.json({status:messages.apiStatusError,message:messages.dbConnectionError});
+        done(err);
+      }
+      else
+      {        
+        var mobileCode = util.getMobRandomInt(1786,9786) + 8;
+        //Remove the users current mob code and generate again.
+        var queryStr = "SELECT * FROM milkdelivery_master.sp_insert_regeneratemobilecode($1,$2,$3);";
+        var paramsArr = new Array(req.decoded.uid, mobileCode, req.decoded.schema);
+        conn.pgExecuteQuery(queryStr, paramsArr, clientConn, function(err, result){
+            res.status(200);
+            if(err)
+            {
+              logger.error("UserControl - Error while generating mobile code " + err);
+              res.json({status:messages.apiStatusError,message:messages.mobileVerificationError});
+            }
+            else
+            {
+                //If record is saved successfully.
+                if(result && result.rows && result.rows.length > 0)
+                {         
+                 
+                    res.status(200);
+                    res.json({status:messages.apiStatusSuccess, message:messages.mobileCodeGeneratedSuccess});                  
+                                   
+                }
+                else
+                {             
+                    res.status(200);                  
+                    res.json({status:messages.apiStatusError,message:messages.mobileCodeGeneratedError});
+                }
+            }
+            done(err);
+        });
+      }
+    });
+  }
+  else
+  {
+    logger.error("UserControl - Mobile code generation : Missing data field");
+    res.status(200);     
+    res.json({status:messages.apiStatusError,message:messages.mobileCodeGeneratedError});
   }};
 
 /*

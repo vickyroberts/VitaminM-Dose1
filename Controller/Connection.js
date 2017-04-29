@@ -18,6 +18,7 @@ var config = {
 
 var pool = new pg.Pool(config);
 
+//Create a PG connection pool.
 exports.pgConnectionPool = function(callback){
 
     pool.connect(function(err, client, done) {
@@ -33,7 +34,7 @@ exports.pgConnectionPool = function(callback){
 });
 };
 
-//Params in sequence: Query / Pg Function to be called, parameters in JS array, 
+//Select Functions : Params in sequence: Query / Pg Function to be called, parameters in JS array, 
 //client connection created by caller class and callback function.
 exports.pgSelectQuery = function(queryString, paramsArray, clientConn, callback){
     clientConn.queryAsync("BEGIN").then(function(result){
@@ -53,6 +54,19 @@ exports.pgSelectQuery = function(queryString, paramsArray, clientConn, callback)
         }).catch(function(err){
             callback(err);
         });
+};
+
+//Insert or Update functions: Params in seq.: Query / Pg Function to be called, parameters in JS array, 
+//client connection created by caller class and callback function.
+exports.pgExecuteQuery = function(queryString, paramsArray, clientConn, callback){   
+          var sendValue = {text:queryString, values:paramsArray}; 
+          clientConn.queryAsync(sendValue).then(function(result)
+          {                              
+            callback(null, result);            
+          }).catch(function(err){            
+            callback(err);
+          });
+        
 };
 
 // exports.getPGConnection = function(callback)

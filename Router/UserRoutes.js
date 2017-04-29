@@ -18,9 +18,15 @@ router.use(function(req,res,next){
 });
 
 router.get('/',function(req,res){res.status(400), res.json({message:messages.wrongApiUrl})});
-router.post('/authuser',userController.authUser);
-router.post('/checkEmail',userController.userEmailExists);
-router.post('/checkMobile',userController.userMobileExists);
+router.post('/authuser',userController.authUser); //Login User
+router.post('/checkEmail',userController.userEmailExists); //check if user exists
+router.post('/checkMobile',userController.userMobileExists); //check if mobile exists.
+router.post('/putUserDetails',userController.registerUser); //add user details.
+router.post('/verifyMob',userController.verifyUserMobile); //verify mobile code.
+router.post('/regenerateMob',userController.regenerateMobileCode); //regenerate mobile code.
+
+
+
 
 /*
 //router.get('/users',userController.getUsersList);

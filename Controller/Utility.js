@@ -9,6 +9,10 @@ exports.ValidatePassword = function(password)
   return re.test(password);
 };
 
+exports.getMobRandomInt = function(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 //Validate email
 exports.ValidateEmail = function(email) {
     var re = /^([\w-]+(?:\.[\w-]+)*)@((?:[\w-]+\.)*\w[\w-]{0,66})\.([a-z]{2,6}(?:\.[a-z]{2})?)$/i;

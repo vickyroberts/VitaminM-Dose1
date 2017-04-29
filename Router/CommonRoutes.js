@@ -4,7 +4,7 @@ var messages = require('../GlobalMessages.js');
 
 exports.verifyTokenValidity=function(req, res, next){
     var token = req.body.token || req.query.token || req.headers['x-access-token'];
-    if(req.url != "/authuser")
+    if(req.url != "/authuser" && req.url != "/putUserDetails")
     {
             // decode token
             if (token) {
