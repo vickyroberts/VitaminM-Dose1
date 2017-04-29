@@ -7,12 +7,11 @@ var pg = require('pg');
 var fs = require('fs');
 var jwt = require('jsonwebtoken');
 //Custom packages
-
+var logger = require("../logger");
+var messages = require('../GlobalMessages.js');
+var conn = require("./Connection.js");
+var util = require("./Utility.js");
 
 
 promise.promisifyAll(bcrypt);
 promise.promisifyAll(pg);
-
-exports.getProducts = function(req,res){
-
-};
